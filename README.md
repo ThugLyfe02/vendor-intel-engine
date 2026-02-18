@@ -119,3 +119,26 @@ The system avoids:
 - Hidden state mutation
 
 Design decisions prioritize auditability over complexity.
+
+---
+
+---
+
+## 🗺 Roadmap
+
+Short-Term:
+- Add pytest coverage for detection modules
+- Improve vendor normalization logic
+- Expand severity calibration logic
+
+Mid-Term:
+- Introduce price drift detection
+- Add anomaly outlier detection
+- Implement configurable scoring thresholds
+- Add API wrapper (FastAPI)
+
+Long-Term:
+- Integrate vendor alias intelligence
+- Add FX normalization layer
+- Introduce explainable ML scoring as optional layer
+- Add multi-tenant SaaS wrapper
