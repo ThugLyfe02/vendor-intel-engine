@@ -1,0 +1,40 @@
+{
+  "detections": [
+    {
+      "detection_type": "duplicate",
+      "rule_triggered": "same_vendor_same_amount_within_time_window",
+      "supporting_evidence": {
+        "vendor": "office supplies co",
+        "amount": "2450.00",
+        "time_window_days": 7
+      },
+      "financial_impact_estimate": "2450.00",
+      "confidence_score": 0.85,
+      "risk_severity": "MEDIUM",
+      "currency": "USD"
+    },
+    {
+      "detection_type": "recurring",
+      "rule_triggered": "consistent_interval_recurring_pattern",
+      "supporting_evidence": {
+        "vendor": "adobe",
+        "amount": "79.99",
+        "intervals_detected": [31, 29]
+      },
+      "financial_impact_estimate": "959.88",
+      "confidence_score": 0.9,
+      "risk_severity": "LOW",
+      "currency": "USD"
+    }
+  ],
+  "currency_totals": {
+    "USD": "3409.88"
+  },
+  "summary": {
+    "USD": {
+      "flagged_amount": "3409.88",
+      "total_spend": "5644.96",
+      "percent_flagged": "60.38"
+    }
+  }
+}
