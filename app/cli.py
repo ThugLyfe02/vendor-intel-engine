@@ -1,7 +1,6 @@
 import sys
 import json
 from decimal import Decimal
-from typing import List
 
 from app.ingestion.csv_loader import load_csv
 from app.application.engine import VendorLeakEngine
@@ -14,17 +13,13 @@ def main():
 
     file_path = sys.argv[1]
 
-    ingestion_result = load_csv(file_path)
-
-    if ingestion_result.errors:
-        print("WARNING: Some rows failed ingestion.")
-        print(f"Error count: {len(ingestion_result.errors)}")
+    transactions = load_csv(file_path)
 
     engine = VendorLeakEngine()
 
-    results = engine.run(ingestion_result.transactions)
+    results = engine.run(transactions)
 
-    # Convert Decimal objects to string for JSON safety
+    # Convert Decimal objects to string for JSON serialization
     def decimal_serializer(obj):
         if isinstance(obj, Decimal):
             return str(obj)
