@@ -1,0 +1,9 @@
+transaction_id,date,vendor_name,amount,currency,category,description,payment_method
+1,2024-01-01T00:00:00,Adobe,79.99,USD,Software,Monthly subscription,Card
+2,2024-02-01T00:00:00,Adobe,79.99,USD,Software,Monthly subscription,Card
+3,2024-03-01T00:00:00,Adobe,79.99,USD,Software,Monthly subscription,Card
+4,2024-01-10T00:00:00,Office Supplies Co,2450.00,USD,Office,Invoice 123,ACH
+5,2024-01-12T00:00:00,Office Supplies Co,2450.00,USD,Office,Invoice 123 Duplicate,ACH
+6,2024-01-15T00:00:00,Zoom,149.00,USD,Software,Zoom Monthly,Card
+7,2024-02-15T00:00:00,Zoom,149.00,USD,Software,Zoom Monthly,Card
+8,2024-03-15T00:00:00,Zoom,149.00,USD,Software,Zoom Monthly,Card
