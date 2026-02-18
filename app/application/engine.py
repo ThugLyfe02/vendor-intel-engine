@@ -2,9 +2,9 @@ from decimal import Decimal
 from typing import List, Dict
 
 from app.domain.models.transaction import Transaction
-from app.domain.models.detection_result import DetectionResult
 from app.domain.detection.duplicate_detector import DuplicateDetector
 from app.domain.detection.recurring_detector import RecurringDetector
+from app.domain.scoring.risk_scoring import RiskScoringEngine
 
 
 class VendorLeakEngine:
@@ -14,9 +14,11 @@ class VendorLeakEngine:
             DuplicateDetector(),
             RecurringDetector(),
         ]
+        self.scoring_engine = RiskScoringEngine()
 
     def run(self, transactions: List[Transaction]) -> Dict:
-        all_detections: List[DetectionResult] = []
+
+        all_detections = []
 
         for detector in self.detectors:
             results = detector.detect(transactions)
@@ -24,9 +26,16 @@ class VendorLeakEngine:
 
         total_spend_by_currency = self._calculate_total_spend(transactions)
 
+        scored_results = self.scoring_engine.score(
+            detections=all_detections,
+            total_spend_by_currency=total_spend_by_currency,
+        )
+
         return {
-            "detections": all_detections,
-            "total_spend_by_currency": total_spend_by_currency,
+            "detections": scored_results["updated_detections"],
+            "vendor_totals": scored_results["vendor_totals"],
+            "currency_totals": scored_results["currency_totals"],
+            "summary": scored_results["summary"],
         }
 
     def _calculate_total_spend(self, transactions: List[Transaction]) -> Dict[str, Decimal]:
