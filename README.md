@@ -102,3 +102,20 @@ This engine provides structured, explainable intelligence
 instead of opaque AI predictions.
 
 It is built to be auditable, deterministic, and extensible.
+
+---
+
+## 🔒 Risk & Audit Considerations
+
+This engine is intentionally deterministic and explainable.
+
+In financial environments, false positives and silent arithmetic errors create liability risk.
+
+The system avoids:
+
+- Floating point arithmetic
+- Black-box ML scoring
+- Implicit currency conversion
+- Hidden state mutation
+
+Design decisions prioritize auditability over complexity.
