@@ -9,7 +9,9 @@ from app.domain.enums import DetectionType, RiskSeverity
 
 
 class DuplicateDetector(BaseDetector):
+
     VERSION = "1.0.1"
+
     def __init__(self, time_window_days: int = 7, min_amount: Decimal = Decimal("0.00")):
         self.time_window_days = time_window_days
         self.min_amount = min_amount
@@ -52,12 +54,17 @@ class DuplicateDetector(BaseDetector):
 
                 result = DetectionResult.create(
                     detection_type=DetectionType.DUPLICATE,
-                    related_transaction_ids=[current.transaction_id, candidate.transaction_id],
+                    related_transaction_ids=[
+                        current.transaction_id,
+                        candidate.transaction_id,
+                    ],
                     rule_triggered="same_vendor_same_amount_within_time_window",
                     supporting_evidence={
                         "vendor": current.vendor_normalized_name,
                         "amount": str(current.amount),
                         "time_window_days": self.time_window_days,
+                        "detector_class": self.__class__.__name__,
+                        "detector_version": self.VERSION,
                     },
                     financial_impact_estimate=impact,
                     confidence_score=0.85,
