@@ -9,7 +9,7 @@ from app.domain.enums import DetectionType, RiskSeverity
 
 
 class DuplicateDetector(BaseDetector):
-
+    VERSION = "1.0.1"
     def __init__(self, time_window_days: int = 7, min_amount: Decimal = Decimal("0.00")):
         self.time_window_days = time_window_days
         self.min_amount = min_amount
