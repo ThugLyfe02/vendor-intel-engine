@@ -11,11 +11,13 @@ from app.domain.enums import DetectionType, RiskSeverity
 
 class RecurringDetector(BaseDetector):
 
+    VERSION = "1.0.1"
+
     def __init__(self, interval_tolerance_days: int = 3):
         self.interval_tolerance_days = interval_tolerance_days
 
     def detect(self, transactions: List[Transaction]) -> List[DetectionResult]:
-        results = []
+        results: List[DetectionResult] = []
 
         grouped = defaultdict(list)
 
@@ -42,12 +44,16 @@ class RecurringDetector(BaseDetector):
 
                 result = DetectionResult.create(
                     detection_type=DetectionType.RECURRING,
-                    related_transaction_ids=[t.transaction_id for t in tx_list],
+                    related_transaction_ids=[
+                        t.transaction_id for t in tx_list
+                    ],
                     rule_triggered="consistent_interval_recurring_pattern",
                     supporting_evidence={
                         "vendor": vendor,
                         "amount": str(amount),
                         "intervals_detected": intervals,
+                        "detector_class": self.__class__.__name__,
+                        "detector_version": self.VERSION,
                     },
                     financial_impact_estimate=annualized_estimate,
                     confidence_score=0.9,
