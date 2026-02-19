@@ -142,3 +142,16 @@ Long-Term:
 - Add FX normalization layer
 - Introduce explainable ML scoring as optional layer
 - Add multi-tenant SaaS wrapper
+
+---
+
+## 🧬 Determinism Guarantee
+
+This engine guarantees:
+
+- Identical input → identical output
+- No stochastic behavior
+- No ML opacity in core detection layer
+- Explicit rule traceability
+
+This ensures reproducibility in financial environments.
