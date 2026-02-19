@@ -40,3 +40,28 @@ Severity determined by:
 
 Future:
 Materiality relative to total spend.
+
+--- 
+
+---
+
+### Installment Protection (Planned Enhancement)
+
+Risk:
+Structured installment payments (e.g., split invoices, scheduled financing) may be incorrectly flagged as duplicates.
+
+Planned Mitigation:
+
+- Compare invoice references when available.
+- Detect consistent installment schedules (equal amounts at predefined intervals).
+- Suppress duplicate flags when installment patterns are confirmed.
+- Introduce installment classification layer prior to duplicate evaluation.
+
+Rationale:
+
+Duplicate detection must distinguish between:
+
+- Accidental duplicate payments  
+- Intentional installment structures  
+
+This enhancement preserves detection precision while reducing false positives in structured billing scenarios.
