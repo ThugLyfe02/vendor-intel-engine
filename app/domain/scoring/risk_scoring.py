@@ -7,28 +7,18 @@ from app.domain.enums import RiskSeverity
 
 
 class RiskScoringEngine:
-    """
-    Centralized deterministic risk normalization engine.
 
-    Responsibilities:
-    - Enforce non-zero financial impact floor
-    - Apply centralized severity thresholds
-    - Aggregate vendor-level totals
-    - Aggregate currency-level totals
-    - Compute materiality summary
-    """
-
-    VERSION = "1.1.0"
+    VERSION = "1.3.0"
 
     def __init__(
         self,
         medium_threshold: Decimal = Decimal("1000"),
         high_threshold: Decimal = Decimal("10000"),
-        minimum_materiality_floor: Decimal = Decimal("0.01"),
+        materiality_escalation_threshold: Decimal = Decimal("0.10"),  # 10%
     ):
         self.medium_threshold = medium_threshold
         self.high_threshold = high_threshold
-        self.minimum_materiality_floor = minimum_materiality_floor
+        self.materiality_escalation_threshold = materiality_escalation_threshold
 
     def score(
         self,
@@ -36,43 +26,51 @@ class RiskScoringEngine:
         total_spend_by_currency: Dict[str, Decimal],
     ) -> Dict:
 
-        vendor_totals: Dict[str, Dict[str, Decimal]] = defaultdict(lambda: defaultdict(Decimal))
-        currency_totals: Dict[str, Decimal] = defaultdict(Decimal)
+        vendor_totals = defaultdict(lambda: defaultdict(Decimal))
+        currency_totals = defaultdict(Decimal)
+        updated_detections = []
 
-        updated_detections: List[DetectionResult] = []
+        total_company_spend = sum(total_spend_by_currency.values())
 
+        # First pass: apply base severity + aggregate vendor totals
         for detection in detections:
 
             impact = detection.financial_impact_estimate
 
-            # 🔐 Strict financial floor enforcement
-            if (
-                impact is None
-                or impact <= Decimal("0")
-                or impact < self.minimum_materiality_floor
-            ):
+            if impact <= Decimal("0"):
                 continue
 
             currency = detection.currency
 
-            # Deterministic severity normalization
-            severity = self._determine_severity(impact)
+            base_severity = self._determine_severity(impact)
 
-            # Create immutable updated detection
-            normalized_detection = detection.model_copy(
-                update={
-                    "risk_severity": severity
-                }
+            normalized = detection.model_copy(
+                update={"risk_severity": base_severity}
             )
 
-            updated_detections.append(normalized_detection)
+            updated_detections.append(normalized)
 
-            vendor = normalized_detection.supporting_evidence.get("vendor", "unknown")
+            vendor = normalized.supporting_evidence.get("vendor", "unknown")
 
             vendor_totals[vendor][currency] += impact
             currency_totals[currency] += impact
 
-        # Deterministic ordering of vendor totals
+        # Second pass: vendor-level materiality escalation
+        if total_company_spend > Decimal("0"):
+            for vendor, currency_map in vendor_totals.items():
+
+                vendor_total_flagged = sum(currency_map.values())
+                vendor_ratio = vendor_total_flagged / total_company_spend
+
+                if vendor_ratio >= self.materiality_escalation_threshold:
+
+                    for i, detection in enumerate(updated_detections):
+                        if detection.supporting_evidence.get("vendor") == vendor:
+                            updated_detections[i] = detection.model_copy(
+                                update={"risk_severity": RiskSeverity.HIGH}
+                            )
+
+        # Deterministic ordering of aggregates
         sorted_vendor_totals = {
             vendor: dict(sorted(currency_map.items()))
             for vendor, currency_map in sorted(vendor_totals.items())
@@ -82,7 +80,7 @@ class RiskScoringEngine:
 
         summary = self._build_summary(
             sorted_currency_totals,
-            total_spend_by_currency
+            total_spend_by_currency,
         )
 
         return {
@@ -113,9 +111,7 @@ class RiskScoringEngine:
             total_spend = total_spend_by_currency.get(currency, Decimal("0"))
 
             if total_spend > Decimal("0"):
-                percent_flagged = (
-                    flagged_amount / total_spend
-                ) * Decimal("100")
+                percent_flagged = (flagged_amount / total_spend) * Decimal("100")
             else:
                 percent_flagged = Decimal("0")
 
