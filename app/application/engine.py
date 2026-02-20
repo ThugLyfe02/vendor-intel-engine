@@ -11,9 +11,10 @@ from app.domain.utils.dataset_fingerprint import generate_dataset_hash
 from app.domain.behavior.vendor_behavior_analyzer import VendorBehaviorAnalyzer
 from app.domain.ranking.vendor_risk_ranker import VendorRiskRanker
 from app.reporting.executive_summary import ExecutiveSummaryGenerator
+from app.domain.diagnostics.engine_diagnostics import EngineDiagnostics
 
 
-ENGINE_VERSION = "0.5.0"
+ENGINE_VERSION = "0.6.0"
 
 
 class VendorLeakEngine:
@@ -31,25 +32,40 @@ class VendorLeakEngine:
 
     def run(self, transactions: List[Transaction]) -> Dict:
 
-        result = self._execute(transactions)
+        diagnostics = EngineDiagnostics()
 
-        if self.enforce_determinism:
-            verification = self._execute(copy.deepcopy(transactions))
+        try:
+            result = self._execute(transactions, diagnostics)
 
-            if json.dumps(result, sort_keys=True, default=str) != \
-               json.dumps(verification, sort_keys=True, default=str):
-                raise RuntimeError("Determinism violation detected")
+            if self.enforce_determinism:
+                verification = self._execute(copy.deepcopy(transactions), diagnostics)
 
-        return result
+                if json.dumps(result, sort_keys=True, default=str) != \
+                   json.dumps(verification, sort_keys=True, default=str):
+                    diagnostics.add_error("Determinism violation detected")
 
-    def _execute(self, transactions: List[Transaction]) -> Dict:
+            result["diagnostics"] = diagnostics.to_dict()
+            return result
+
+        except Exception as e:
+            diagnostics.add_error(str(e))
+            return {
+                "engine_version": ENGINE_VERSION,
+                "diagnostics": diagnostics.to_dict(),
+            }
+
+    def _execute(self, transactions: List[Transaction], diagnostics: EngineDiagnostics) -> Dict:
 
         dataset_hash = generate_dataset_hash(transactions)
 
         all_detections = []
+
         for detector in self.detectors:
-            results = detector.detect(transactions)
-            all_detections.extend(results)
+            try:
+                results = detector.detect(transactions)
+                all_detections.extend(results)
+            except Exception as e:
+                diagnostics.add_error(f"{detector.__class__.__name__} failed: {str(e)}")
 
         total_spend_by_currency = self._calculate_total_spend(transactions)
 
@@ -88,7 +104,6 @@ class VendorLeakEngine:
         }
 
         executive_summary = self.summary_generator.generate(core_output)
-
         core_output["executive_summary"] = executive_summary
 
         return core_output
