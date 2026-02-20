@@ -1,5 +1,7 @@
 from decimal import Decimal
 from typing import List, Dict
+import copy
+import json
 
 from app.domain.models.transaction import Transaction
 from app.domain.detection.duplicate_detector import DuplicateDetector
@@ -10,12 +12,12 @@ from app.domain.behavior.vendor_behavior_analyzer import VendorBehaviorAnalyzer
 from app.domain.ranking.vendor_risk_ranker import VendorRiskRanker
 
 
-ENGINE_VERSION = "0.3.0"
+ENGINE_VERSION = "0.4.0"
 
 
 class VendorLeakEngine:
 
-    def __init__(self):
+    def __init__(self, enforce_determinism: bool = False):
         self.detectors = [
             DuplicateDetector(),
             RecurringDetector(),
@@ -23,28 +25,37 @@ class VendorLeakEngine:
         self.scoring_engine = RiskScoringEngine()
         self.behavior_analyzer = VendorBehaviorAnalyzer()
         self.vendor_ranker = VendorRiskRanker()
+        self.enforce_determinism = enforce_determinism
 
     def run(self, transactions: List[Transaction]) -> Dict:
 
-        # Generate deterministic dataset fingerprint
+        result = self._execute(transactions)
+
+        if self.enforce_determinism:
+            verification = self._execute(copy.deepcopy(transactions))
+
+            if json.dumps(result, sort_keys=True, default=str) != \
+               json.dumps(verification, sort_keys=True, default=str):
+                raise RuntimeError("Determinism violation detected")
+
+        return result
+
+    def _execute(self, transactions: List[Transaction]) -> Dict:
+
         dataset_hash = generate_dataset_hash(transactions)
 
-        # Run detection modules
         all_detections = []
         for detector in self.detectors:
             results = detector.detect(transactions)
             all_detections.extend(results)
 
-        # Calculate total spend per currency
         total_spend_by_currency = self._calculate_total_spend(transactions)
 
-        # Apply centralized scoring
         scored_results = self.scoring_engine.score(
             detections=all_detections,
             total_spend_by_currency=total_spend_by_currency,
         )
 
-        # Deterministic detection ordering
         sorted_detections = sorted(
             scored_results["updated_detections"],
             key=lambda d: (
@@ -55,10 +66,8 @@ class VendorLeakEngine:
             )
         )
 
-        # Compute vendor behavioral fingerprints
         vendor_behavior_profiles = self.behavior_analyzer.analyze(transactions)
 
-        # Compute vendor risk ranking
         vendor_ranking = self.vendor_ranker.rank(
             scored_results["vendor_totals"],
             vendor_behavior_profiles,
