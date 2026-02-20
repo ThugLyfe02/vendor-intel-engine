@@ -11,7 +11,7 @@ from app.domain.enums import DetectionType, RiskSeverity
 
 class DuplicateDetector(BaseDetector):
 
-    VERSION = "1.3.0"
+    VERSION = "1.4.0"
 
     def __init__(self, time_window_days: int = 7, min_amount: Decimal = Decimal("0.00")):
         self.time_window_days = time_window_days
@@ -21,7 +21,7 @@ class DuplicateDetector(BaseDetector):
 
         results: List[DetectionResult] = []
 
-        # First group by vendor + currency
+        # Primary grouping by vendor + currency
         vendor_currency_groups = defaultdict(list)
 
         for tx in transactions:
@@ -45,6 +45,7 @@ class DuplicateDetector(BaseDetector):
 
                 amount_list.sort(key=lambda t: t.date)
 
+                # 🔒 Installment suppression logic
                 if self._is_structured_installment(amount_list):
                     continue
 
@@ -73,6 +74,7 @@ class DuplicateDetector(BaseDetector):
                                 "vendor": vendor,
                                 "amount": str(amount),
                                 "time_window_days": self.time_window_days,
+                                "installment_suppressed": False,
                                 "detector_class": self.__class__.__name__,
                                 "detector_version": self.VERSION,
                             },
@@ -87,6 +89,15 @@ class DuplicateDetector(BaseDetector):
         return results
 
     def _is_structured_installment(self, tx_list: List[Transaction]) -> bool:
+        """
+        Detect structured installment payments to avoid false duplicate flags.
+
+        Criteria:
+        - Minimum 3 occurrences
+        - Consistent interval pattern
+        - Stable amount (already grouped)
+        """
+
         if len(tx_list) < 3:
             return False
 
@@ -95,10 +106,17 @@ class DuplicateDetector(BaseDetector):
             for i in range(len(tx_list) - 1)
         ]
 
-        avg_interval = sum(intervals) / len(intervals)
-        tolerance = 5
+        if not intervals:
+            return False
 
-        return all(abs(i - avg_interval) <= tolerance for i in intervals)
+        avg_interval = sum(intervals) / len(intervals)
+        tolerance = 5  # Days tolerance
+
+        consistent_pattern = all(
+            abs(i - avg_interval) <= tolerance for i in intervals
+        )
+
+        return consistent_pattern
 
     def _determine_severity(self, impact: Decimal) -> RiskSeverity:
         if impact >= Decimal("10000"):
