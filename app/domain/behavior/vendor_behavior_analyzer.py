@@ -1,15 +1,13 @@
-from decimal import Decimal
+from decimal import Decimal, getcontext
 from typing import List, Dict
 from collections import defaultdict
-from statistics import mean, stdev
-from datetime import timedelta
 
 from app.domain.models.transaction import Transaction
 
 
 class VendorBehaviorAnalyzer:
 
-    VERSION = "1.0.0"
+    VERSION = "1.2.0"
 
     def analyze(self, transactions: List[Transaction]) -> Dict:
 
@@ -31,7 +29,7 @@ class VendorBehaviorAnalyzer:
                 for i in range(len(dates) - 1)
             ]
 
-            volatility_score = self._compute_volatility(amounts)
+            volatility_score = self._compute_decimal_volatility(amounts)
             interval_stability = self._compute_interval_stability(interval_days)
             duplicate_density = self._compute_duplicate_density(amounts)
             recurring_ratio = self._compute_recurring_ratio(interval_days)
@@ -47,26 +45,41 @@ class VendorBehaviorAnalyzer:
 
         return vendor_profiles
 
-    def _compute_volatility(self, amounts: List[Decimal]) -> float:
+    def _compute_decimal_volatility(self, amounts: List[Decimal]) -> Decimal:
         if len(amounts) < 2:
-            return 0.0
-        numeric_amounts = [float(a) for a in amounts]
-        return stdev(numeric_amounts)
+            return Decimal("0")
 
-    def _compute_interval_stability(self, intervals: List[int]) -> float:
+        mean_val = sum(amounts) / Decimal(len(amounts))
+
+        variance = sum(
+            (a - mean_val) ** 2 for a in amounts
+        ) / Decimal(len(amounts) - 1)
+
+        return variance.sqrt()
+
+    def _compute_interval_stability(self, intervals: List[int]) -> Decimal:
         if len(intervals) < 2:
-            return 1.0
-        return 1.0 / (1.0 + stdev(intervals))
+            return Decimal("1")
 
-    def _compute_duplicate_density(self, amounts: List[Decimal]) -> float:
+        avg_interval = Decimal(sum(intervals)) / Decimal(len(intervals))
+
+        variance = sum(
+            (Decimal(i) - avg_interval) ** 2 for i in intervals
+        ) / Decimal(len(intervals) - 1)
+
+        return Decimal("1") / (Decimal("1") + variance)
+
+    def _compute_duplicate_density(self, amounts: List[Decimal]) -> Decimal:
         if not amounts:
-            return 0.0
-        unique_count = len(set(amounts))
-        return 1.0 - (unique_count / len(amounts))
+            return Decimal("0")
 
-    def _compute_recurring_ratio(self, intervals: List[int]) -> float:
+        unique_count = len(set(amounts))
+        return Decimal("1") - (Decimal(unique_count) / Decimal(len(amounts)))
+
+    def _compute_recurring_ratio(self, intervals: List[int]) -> Decimal:
         if not intervals:
-            return 0.0
-        avg_interval = mean(intervals)
+            return Decimal("0")
+
         monthly_like = [i for i in intervals if abs(i - 30) <= 5]
-        return len(monthly_like) / len(intervals)
+
+        return Decimal(len(monthly_like)) / Decimal(len(intervals))
