@@ -7,9 +7,10 @@ from app.domain.detection.recurring_detector import RecurringDetector
 from app.domain.scoring.risk_scoring import RiskScoringEngine
 from app.domain.utils.dataset_fingerprint import generate_dataset_hash
 from app.domain.behavior.vendor_behavior_analyzer import VendorBehaviorAnalyzer
+from app.domain.ranking.vendor_risk_ranker import VendorRiskRanker
 
 
-ENGINE_VERSION = "0.2.0"
+ENGINE_VERSION = "0.3.0"
 
 
 class VendorLeakEngine:
@@ -21,15 +22,15 @@ class VendorLeakEngine:
         ]
         self.scoring_engine = RiskScoringEngine()
         self.behavior_analyzer = VendorBehaviorAnalyzer()
+        self.vendor_ranker = VendorRiskRanker()
 
     def run(self, transactions: List[Transaction]) -> Dict:
 
-        # Deterministic dataset fingerprint
+        # Generate deterministic dataset fingerprint
         dataset_hash = generate_dataset_hash(transactions)
 
-        all_detections = []
-
         # Run detection modules
+        all_detections = []
         for detector in self.detectors:
             results = detector.detect(transactions)
             all_detections.extend(results)
@@ -57,6 +58,13 @@ class VendorLeakEngine:
         # Compute vendor behavioral fingerprints
         vendor_behavior_profiles = self.behavior_analyzer.analyze(transactions)
 
+        # Compute vendor risk ranking
+        vendor_ranking = self.vendor_ranker.rank(
+            scored_results["vendor_totals"],
+            vendor_behavior_profiles,
+            total_spend_by_currency,
+        )
+
         return {
             "engine_version": ENGINE_VERSION,
             "dataset_hash": dataset_hash,
@@ -65,6 +73,7 @@ class VendorLeakEngine:
             "currency_totals": scored_results["currency_totals"],
             "summary": scored_results["summary"],
             "vendor_behavior_profiles": vendor_behavior_profiles,
+            "vendor_ranking": vendor_ranking,
         }
 
     def _calculate_total_spend(self, transactions: List[Transaction]) -> Dict[str, Decimal]:
