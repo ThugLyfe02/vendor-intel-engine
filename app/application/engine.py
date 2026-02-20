@@ -10,9 +10,10 @@ from app.domain.scoring.risk_scoring import RiskScoringEngine
 from app.domain.utils.dataset_fingerprint import generate_dataset_hash
 from app.domain.behavior.vendor_behavior_analyzer import VendorBehaviorAnalyzer
 from app.domain.ranking.vendor_risk_ranker import VendorRiskRanker
+from app.reporting.executive_summary import ExecutiveSummaryGenerator
 
 
-ENGINE_VERSION = "0.4.0"
+ENGINE_VERSION = "0.5.0"
 
 
 class VendorLeakEngine:
@@ -25,6 +26,7 @@ class VendorLeakEngine:
         self.scoring_engine = RiskScoringEngine()
         self.behavior_analyzer = VendorBehaviorAnalyzer()
         self.vendor_ranker = VendorRiskRanker()
+        self.summary_generator = ExecutiveSummaryGenerator()
         self.enforce_determinism = enforce_determinism
 
     def run(self, transactions: List[Transaction]) -> Dict:
@@ -74,7 +76,7 @@ class VendorLeakEngine:
             total_spend_by_currency,
         )
 
-        return {
+        core_output = {
             "engine_version": ENGINE_VERSION,
             "dataset_hash": dataset_hash,
             "detections": sorted_detections,
@@ -84,6 +86,12 @@ class VendorLeakEngine:
             "vendor_behavior_profiles": vendor_behavior_profiles,
             "vendor_ranking": vendor_ranking,
         }
+
+        executive_summary = self.summary_generator.generate(core_output)
+
+        core_output["executive_summary"] = executive_summary
+
+        return core_output
 
     def _calculate_total_spend(self, transactions: List[Transaction]) -> Dict[str, Decimal]:
         totals: Dict[str, Decimal] = {}
