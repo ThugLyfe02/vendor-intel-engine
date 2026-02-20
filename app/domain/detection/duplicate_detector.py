@@ -1,6 +1,7 @@
 from datetime import timedelta
 from decimal import Decimal
 from typing import List
+from collections import defaultdict
 
 from app.domain.detection.base_detector import BaseDetector
 from app.domain.models.transaction import Transaction
@@ -10,71 +11,94 @@ from app.domain.enums import DetectionType, RiskSeverity
 
 class DuplicateDetector(BaseDetector):
 
-    VERSION = "1.0.1"
+    VERSION = "1.3.0"
 
     def __init__(self, time_window_days: int = 7, min_amount: Decimal = Decimal("0.00")):
         self.time_window_days = time_window_days
         self.min_amount = min_amount
 
     def detect(self, transactions: List[Transaction]) -> List[DetectionResult]:
+
         results: List[DetectionResult] = []
 
-        # Sort for deterministic processing
-        transactions_sorted = sorted(
-            transactions,
-            key=lambda t: (t.vendor_normalized_name, t.currency, t.date)
-        )
+        # First group by vendor + currency
+        vendor_currency_groups = defaultdict(list)
 
-        for i in range(len(transactions_sorted)):
-            current = transactions_sorted[i]
-
-            if current.amount < self.min_amount:
+        for tx in transactions:
+            if tx.amount < self.min_amount:
                 continue
+            key = (tx.vendor_normalized_name, tx.currency)
+            vendor_currency_groups[key].append(tx)
 
-            for j in range(i + 1, len(transactions_sorted)):
-                candidate = transactions_sorted[j]
+        for (vendor, currency), tx_list in vendor_currency_groups.items():
 
-                # Stop when vendor changes (sorted by vendor)
-                if candidate.vendor_normalized_name != current.vendor_normalized_name:
-                    break
+            # Secondary grouping by amount
+            amount_groups = defaultdict(list)
 
-                # Currency must match
-                if candidate.currency != current.currency:
+            for tx in tx_list:
+                amount_groups[tx.amount].append(tx)
+
+            for amount, amount_list in amount_groups.items():
+
+                if len(amount_list) < 2:
                     continue
 
-                # Amount must match exactly
-                if candidate.amount != current.amount:
+                amount_list.sort(key=lambda t: t.date)
+
+                if self._is_structured_installment(amount_list):
                     continue
 
-                # Time window enforcement
-                if candidate.date - current.date > timedelta(days=self.time_window_days):
-                    break
+                window_start = 0
 
-                impact = current.amount
+                for window_end in range(1, len(amount_list)):
 
-                result = DetectionResult.create(
-                    detection_type=DetectionType.DUPLICATE,
-                    related_transaction_ids=[
-                        current.transaction_id,
-                        candidate.transaction_id,
-                    ],
-                    rule_triggered="same_vendor_same_amount_within_time_window",
-                    supporting_evidence={
-                        "vendor": current.vendor_normalized_name,
-                        "amount": str(current.amount),
-                        "time_window_days": self.time_window_days,
-                        "detector_class": self.__class__.__name__,
-                        "detector_version": self.VERSION,
-                    },
-                    financial_impact_estimate=impact,
-                    confidence_score=0.85,
-                    risk_severity=self._determine_severity(impact),
-                    currency=current.currency,
-                )
+                    while (
+                        amount_list[window_end].date - amount_list[window_start].date
+                        > timedelta(days=self.time_window_days)
+                    ):
+                        window_start += 1
 
-                results.append(result)
+                    if window_start != window_end:
+                        current = amount_list[window_start]
+                        candidate = amount_list[window_end]
+
+                        result = DetectionResult.create(
+                            detection_type=DetectionType.DUPLICATE,
+                            related_transaction_ids=[
+                                current.transaction_id,
+                                candidate.transaction_id,
+                            ],
+                            rule_triggered="indexed_vendor_currency_amount_window",
+                            supporting_evidence={
+                                "vendor": vendor,
+                                "amount": str(amount),
+                                "time_window_days": self.time_window_days,
+                                "detector_class": self.__class__.__name__,
+                                "detector_version": self.VERSION,
+                            },
+                            financial_impact_estimate=amount,
+                            confidence_score=0.85,
+                            risk_severity=self._determine_severity(amount),
+                            currency=currency,
+                        )
+
+                        results.append(result)
 
         return results
+
+    def _is_structured_installment(self, tx_list: List[Transaction]) -> bool:
+        if len(tx_list) < 3:
+            return False
+
+        intervals = [
+            (tx_list[i + 1].date - tx_list[i].date).days
+            for i in range(len(tx_list) - 1)
+        ]
+
+        avg_interval = sum(intervals) / len(intervals)
+        tolerance = 5
+
+        return all(abs(i - avg_interval) <= tolerance for i in intervals)
 
     def _determine_severity(self, impact: Decimal) -> RiskSeverity:
         if impact >= Decimal("10000"):
